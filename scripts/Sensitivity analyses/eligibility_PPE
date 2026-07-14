@@ -1,0 +1,35 @@
+#---------------------------------------------------------
+# Collapse to one record per patient
+#---------------------------------------------------------
+
+df <- df %>%
+  group_by(recordid) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(
+    -day_relative_to_onset,
+    -ab_combo,
+    -appropriateness
+  )
+
+#---------------------------------------------------------
+# Format analysis variables
+#---------------------------------------------------------
+
+df <- df %>%
+  mutate(
+    age_new = as.numeric(age_new),
+    comorbidities_CCI = as.numeric(comorbidities_CCI),
+    length_before_onset = as.numeric(length_before_onset)
+  )
+
+#---------------------------------------------------------
+# Apply eligibility criteria
+#---------------------------------------------------------
+
+df <- df %>%
+  filter(
+    age_new >= 18,
+    is.na(died_on_day) | died_on_day >= 4,
+    is.na(discharged_on_day) | discharged_on_day >= 4
+  )
