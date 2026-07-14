@@ -1,0 +1,142 @@
+library(survey)
+#---------------------------------------------------------
+# Function for IPTW risk difference
+#---------------------------------------------------------
+
+## RISK DIFFERENCES - primary outcome
+df <- analysis_3gcre %>% 
+  mutate(
+    death_14 = ifelse(!is.na(died_on_day) & died_on_day <= 14, 1, 0)
+  )
+stopifnot(nrow(df) > 0)
+risk_A1 <- with(df,
+                sum(ipw * death_14 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+)
+risk_A0 <- with(df,
+                sum(ipw * death_14 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+)
+RD_14 <- risk_A1 - risk_A0
+set.seed(123)
+B <- 1000
+n <- nrow(df)
+risk_A1_boot <- numeric(B)
+risk_A0_boot <- numeric(B)
+rd_boot <- numeric(B)
+for (b in seq_len(B)) {
+  idx <- sample.int(n, n, replace = TRUE)
+  d_b <- df[idx, , drop = FALSE]
+  
+  r1 <- with(d_b,
+             sum(ipw * death_14 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+  )
+  
+  r0 <- with(d_b,
+             sum(ipw * death_14 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+  )
+  risk_A1_boot[b] <- r1
+  risk_A0_boot[b] <- r0
+  rd_boot[b] <- r1 - r0
+}
+CI_A1 <- quantile(risk_A1_boot, c(0.025, 0.975))
+CI_A0 <- quantile(risk_A0_boot, c(0.025, 0.975))
+CI_RD <- quantile(rd_boot, c(0.025, 0.975))
+list(
+  risk_A1_14 = sprintf("%.1f%% (%.1f–%.1f)",
+                       risk_A1*100, CI_A1[1]*100, CI_A1[2]*100),
+  risk_A0_14 = sprintf("%.1f%% (%.1f–%.1f)",
+                       risk_A0*100, CI_A0[1]*100, CI_A0[2]*100),
+  RD_14 = sprintf("%.1f%% (%.1f–%.1f)",
+                  RD_14*100, CI_RD[1]*100, CI_RD[2]*100)
+)
+
+## secondary outcomes
+df <- analysis_3gcre %>% 
+  mutate(
+    death_7 = ifelse(!is.na(died_on_day) & died_on_day <= 7, 1, 0)
+  )
+stopifnot(nrow(df) > 0)
+risk_A1 <- with(df,
+                sum(ipw * death_7 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+)
+risk_A0 <- with(df,
+                sum(ipw * death_7 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+)
+RD_7 <- risk_A1 - risk_A0
+set.seed(123)
+B <- 1000
+n <- nrow(df)
+risk_A1_boot <- numeric(B)
+risk_A0_boot <- numeric(B)
+rd_boot <- numeric(B)
+for (b in seq_len(B)) {
+  idx <- sample.int(n, n, replace = TRUE)
+  d_b <- df[idx, , drop = FALSE]
+  
+  r1 <- with(d_b,
+             sum(ipw * death_7 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+  )
+  
+  r0 <- with(d_b,
+             sum(ipw * death_7 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+  )
+  risk_A1_boot[b] <- r1
+  risk_A0_boot[b] <- r0
+  rd_boot[b] <- r1 - r0
+}
+CI_A1 <- quantile(risk_A1_boot, c(0.025, 0.975))
+CI_A0 <- quantile(risk_A0_boot, c(0.025, 0.975))
+CI_RD <- quantile(rd_boot, c(0.025, 0.975))
+list(
+  risk_A1_7 = sprintf("%.1f%% (%.1f–%.1f)",
+                      risk_A1*100, CI_A1[1]*100, CI_A1[2]*100),
+  risk_A0_7 = sprintf("%.1f%% (%.1f–%.1f)",
+                      risk_A0*100, CI_A0[1]*100, CI_A0[2]*100),
+  RD_7 = sprintf("%.1f%% (%.1f–%.1f)",
+                 RD_7*100, CI_RD[1]*100, CI_RD[2]*100)
+)
+
+
+df <- analysis_3gcre %>% 
+  mutate(
+    death_28 = ifelse(!is.na(died_on_day) & died_on_day <= 28, 1, 0)
+  )
+stopifnot(nrow(df) > 0)
+risk_A1 <- with(df,
+                sum(ipw * death_28 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+)
+risk_A0 <- with(df,
+                sum(ipw * death_28 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+)
+RD_28 <- risk_A1 - risk_A0
+set.seed(123)
+B <- 1000
+n <- nrow(df)
+risk_A1_boot <- numeric(B)
+risk_A0_boot <- numeric(B)
+rd_boot <- numeric(B)
+for (b in seq_len(B)) {
+  idx <- sample.int(n, n, replace = TRUE)
+  d_b <- df[idx, , drop = FALSE]
+  
+  r1 <- with(d_b,
+             sum(ipw * death_28 * (A_day0 == 1)) / sum(ipw * (A_day0 == 1))
+  )
+  
+  r0 <- with(d_b,
+             sum(ipw * death_28 * (A_day0 == 0)) / sum(ipw * (A_day0 == 0))
+  )
+  risk_A1_boot[b] <- r1
+  risk_A0_boot[b] <- r0
+  rd_boot[b] <- r1 - r0
+}
+CI_A1 <- quantile(risk_A1_boot, c(0.025, 0.975))
+CI_A0 <- quantile(risk_A0_boot, c(0.025, 0.975))
+CI_RD <- quantile(rd_boot, c(0.025, 0.975))
+list(
+  risk_A1_28 = sprintf("%.1f%% (%.1f–%.1f)",
+                       risk_A1*100, CI_A1[1]*100, CI_A1[2]*100),
+  risk_A0_28 = sprintf("%.1f%% (%.1f–%.1f)",
+                       risk_A0*100, CI_A0[1]*100, CI_A0[2]*100),
+  RD_28 = sprintf("%.1f%% (%.1f–%.1f)",
+                  RD_28*100, CI_RD[1]*100, CI_RD[2]*100)
+)
