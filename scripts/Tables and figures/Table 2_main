@@ -1,0 +1,79 @@
+make_table <- function(data) {
+  
+  data %>%
+    mutate(
+      A_day0 = factor(
+        A_day0,
+        levels = c(1, 0),
+        labels = c("Yes", "No")
+      ),
+      severity_score = as.numeric(severity_score)
+    ) %>%
+    select(
+      age_new,
+      sex,
+      country_income,
+      comorbidities_CCI,
+      severity_score,
+      pitt_score,
+      length_before_onset,
+      adm_ward_types_new,
+      ICU_status_day0,
+      A_day0
+    ) %>%
+    tbl_summary(
+      type = list(
+        severity_score ~ "continuous"),
+      statistic = list(
+        all_continuous() ~ "{median} ({p25}–{p75})",
+        all_categorical() ~ "{n} ({p}%)"
+      ),
+      digits = all_continuous() ~ 0,
+      missing = "no",
+      label = list(
+        age_new ~ "Age (years)",
+        sex ~ "Male sex",
+        country_income ~ "Country income level",
+        comorbidities_CCI ~ "Charlson Comorbidity Index",
+        severity_score ~ "Quick SOFA",
+        pitt_score ~ "Pitt Bacteremia Score",
+        length_before_onset ~ "Length of stay before infection onset (days)",
+        adm_ward_types_new ~ "Admission ward type",
+        ICU_status_day0 ~ "ICU at infection onset",
+        A_day0 ~ "Early appropriate therapy within 24 h from infection onset"
+      )
+    )
+}
+
+tab_overall <- make_table(overall_cohort_weighted)
+
+tab_3gcre <- make_table(
+  filter(overall_cohort_weighted, source == "3GCRE")
+)
+
+tab_cra <- make_table(
+  filter(overall_cohort_weighted, source == "CRAB")
+)
+
+tab_cre <- make_table(
+  filter(overall_cohort_weighted, source == "CRE")
+)
+
+table1 <- tbl_merge(
+  tbls = list(
+    tab_overall,
+    tab_3gcre,
+    tab_cra,
+    tab_cre
+  ),
+  tab_spanner = c(
+    "**Overall**",
+    "**3GCRE**",
+    "**CRA**",
+    "**CRE**"
+  )
+) %>%
+  modify_header(label ~ "**Characteristic**") %>%
+  bold_labels()
+
+table1
