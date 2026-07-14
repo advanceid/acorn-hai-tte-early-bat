@@ -1,0 +1,77 @@
+#=========================================================
+# Assess functional form of continuous covariates
+#=========================================================
+
+plot_functional_form <- function(data, variable, exposure = "A_day0") {
+  
+  ggplot(
+    data,
+    aes(
+      x = .data[[variable]],
+      y = .data[[exposure]]
+    )
+  ) +
+    geom_point(
+      alpha = 0.20,
+      position = position_jitter(height = 0.05),
+      colour = "grey50"
+    ) +
+    geom_smooth(
+      method = "glm",
+      method.args = list(family = "binomial"),
+      se = FALSE,
+      colour = "#D55E00",
+      linewidth = 1
+    ) +
+    geom_smooth(
+      method = "loess",
+      se = FALSE,
+      colour = "#0072B2",
+      linewidth = 1
+    ) +
+    labs(
+      title = paste("Functional form assessment:", variable),
+      x = variable,
+      y = "Probability of early appropriate therapy"
+    ) +
+    theme_bw()
+  
+}
+
+#=========================================================
+# Assess multicollinearity
+#=========================================================
+
+candidate_ps_formula <-
+  A_day0 ~
+  age_new +
+  sex +
+  severity_score +
+  pitt_score +
+  ICU_status_day0 +
+  MV_status_day0 +
+  adm_ward_types_new +
+  admreason_bin +
+  admtype_grp +
+  pre_ab_days +
+  length_before_onset +
+  comorbidities_CCI +
+  country_income +
+  UTI_source +
+  score_coagulation
+
+candidate_ps_model <- glm(
+  candidate_ps_formula,
+  data = df,
+  family = binomial()
+)
+
+car::vif(candidate_ps_model)
+
+#=========================================================
+# Check missingness
+#=========================================================
+sapply(
+  df,
+  function(x) sum(is.na(x))
+)
