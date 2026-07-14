@@ -1,0 +1,191 @@
+#=========================================================
+# 02_create_esbl_daily_exposure.R
+#
+# Create daily treatment exposure dataset for 3GCR-E BSI
+#=========================================================
+source(here::here("scripts", "00_setup.R"))
+day_by_day <- readRDS(
+  here("data", "processed", "day_by_day.rds")
+)
+baseline <- readRDS(
+  here("data", "raw", "baseline_outcomes_index.RData")
+)
+
+#---------------------------------------------------------
+# Restrict to 3GCR-E / ESBL phenotype
+#---------------------------------------------------------
+day_by_day_3gcre <- day_by_day %>%
+  filter(resistance_class == "ENT-3GC")
+#---------------------------------------------------------
+# Collapse antibiotics to one row per patient-day
+#---------------------------------------------------------
+combo_by_day_3gcre <- day_by_day_3gcre %>%
+  group_by(recordid, day_relative_to_onset) %>%
+  summarise(
+    ab_combo = paste(sort(unique(anti_names)), collapse = "+"),
+    .groups = "drop"
+  )
+#---------------------------------------------------------
+# Add patient-day metadata
+#---------------------------------------------------------
+meta_per_day <- day_by_day_3gcre %>%
+  select(
+    recordid,
+    day_relative_to_onset,
+    inf_onset,
+    org_combined,
+    bsi_source_clean,
+    bsi_pri_sec_label
+  ) %>%
+  distinct()
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  left_join(
+    meta_per_day,
+    by = c("recordid", "day_relative_to_onset")
+  ) %>%
+  mutate(
+    ab_combo = na_if(ab_combo, "")
+  )
+#---------------------------------------------------------
+# Create BSI source variable
+#---------------------------------------------------------
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  mutate(
+    bsi_source = case_when(
+      bsi_pri_sec_label == "Primary (unknown origin / central line)" ~
+        "Primary (unknown origin / central line)",
+      bsi_pri_sec_label == "Secondary (defined infection focus)" ~
+        paste("Secondary -", bsi_source_clean),
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  select(
+    recordid,
+    day_relative_to_onset,
+    ab_combo,
+    inf_onset,
+    org_combined,
+    bsi_source
+  )
+#---------------------------------------------------------
+# Define BAT
+#---------------------------------------------------------
+check_appropriateness_esbl_row <- function(row) {
+  # parse ab_combo
+  ab_list <- unlist(strsplit(row$ab_combo, "\\+"))
+  ab_list <- trimws(ab_list)
+  # helper AST
+  check_ast <- function(drug) {
+    if (!drug %in% names(row)) return(NA)
+    v <- suppressWarnings(as.numeric(row[[drug]]))
+    if (is.na(v)) return(NA)
+    if (v == 1) return("R")
+    if (v == 2) return("I")
+    if (v == 3) return("S")
+    if (v %in% c(4,5)) return("Missing")
+    return(NA)
+  }
+  if (c("Meropenem" %in% ab_list)) return("Appropriate")
+  if (c("Imipenem" %in% ab_list)) return("Appropriate")
+  if (c("Ertapenem" %in% ab_list)) return("Appropriate")
+  ## default
+  return("Not appropriate")
+}
+
+# apply function
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  rowwise() %>%
+  mutate(appropriateness = check_appropriateness_esbl_row(pick(everything()))) %>%
+  ungroup()
+
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  select(recordid, ab_combo, appropriateness, everything())
+#---------------------------------------------------------
+# Define timing of first BAT
+#---------------------------------------------------------
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  group_by(recordid) %>%
+  mutate(
+    start_day = case_when(
+      # Appropriate therapy started within the day-0 window
+      # is classified as day 0 exposure.
+      any(
+        day_relative_to_onset %in% c(-1, 0, 1) &
+          appropriateness == "Appropriate"
+      ) ~ 0,
+      # If appropriate therapy was not started in the day-0 window,
+      # identify the first subsequent day of appropriate therapy.
+      any(
+        day_relative_to_onset >= 2 &
+          appropriateness == "Appropriate"
+      ) ~ min(
+        day_relative_to_onset[
+          day_relative_to_onset >= 2 &
+            appropriateness == "Appropriate"
+        ],
+        na.rm = TRUE
+      ),
+      # Patients who never received appropriate therapy during
+      # follow-up are coded as missing start day.
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  ungroup()
+
+#---------------------------------------------------------
+# Check distribution of first appropriate therapy day
+#---------------------------------------------------------
+start_day_distribution <- combo_by_day_3gcre %>%
+  distinct(recordid, start_day) %>%
+  count(start_day) %>%
+  arrange(start_day)
+
+print(start_day_distribution)
+#---------------------------------------------------------
+# Define early appropriate therapy exposure
+#---------------------------------------------------------
+combo_by_day_3gcre <- combo_by_day_3gcre %>% 
+  mutate(
+    A_day0 = case_when(
+      start_day == 0          ~ 1L,
+      TRUE ~ 0L
+    )
+  )
+#---------------------------------------------------------
+# Define exposure regimen during the day-0 window
+#---------------------------------------------------------
+exposure_regimen <- combo_by_day_3gcre %>%
+  group_by(recordid) %>%
+  summarise(
+    exposure_regimen = if (first(A_day0) == 1) { 
+      # First appropriate regimen within the day-0 window
+      first(
+        ab_combo[
+          day_relative_to_onset %in% c(-1, 0, 1) &
+            appropriateness == "Appropriate"
+        ]
+      ) 
+    } else {
+      
+      # All unique regimens received within the day-0 window
+      paste(
+        unique(
+          na.omit(
+            ab_combo[
+              day_relative_to_onset %in% c(-1, 0, 1)
+            ]
+          )
+        ),
+        collapse = " | "
+      )
+      
+    },
+    
+    .groups = "drop"
+  )
+
+combo_by_day_3gcre <- combo_by_day_3gcre %>%
+  left_join(
+    exposure_regimen,
+    by = "recordid"
+  )
