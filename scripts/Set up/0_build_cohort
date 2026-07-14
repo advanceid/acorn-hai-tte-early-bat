@@ -1,0 +1,288 @@
+#---------------------------------------------------------
+# Setup
+#---------------------------------------------------------
+source(here::here("scripts", "00_setup.R"))
+#---------------------------------------------------------
+# Load data
+#---------------------------------------------------------
+treatment <- readRDS(
+  here("data", "raw", "anti_treat_index.RData")
+)
+#---------------------------------------------------------
+# Restrict to bloodstream infections
+#---------------------------------------------------------
+treatment_clean <- treatment %>%
+  filter(
+    infection_types %in% c(
+      "Healthcare-associated BSI",
+      "Hospital-acquired BSI"
+    )
+  ) %>%
+  mutate(
+    anti_start = as.Date(anti_start),
+    anti_end   = as.Date(anti_end),
+    inf_onset  = as.Date(inf_onset),
+    anti_end   = if_else(
+      is.na(anti_end) & !is.na(anti_start),
+      anti_start,
+      anti_end
+    )
+  ) %>%
+  filter(
+    !is.na(anti_start),
+    !is.na(anti_end),
+    !is.na(anti_names)
+  )
+#---------------------------------------------------------
+# Resolve multiple records for the same antibiotic course
+#---------------------------------------------------------
+dup_check <- treatment_clean %>%
+  group_by(recordid, anti_names, anti_start) %>%
+  filter(n() > 1)
+
+if (nrow(dup_check) > 0) {
+  message(
+    nrow(dup_check),
+    " duplicated antibiotic records detected."
+  )
+}
+
+treatment_clean <- treatment_clean %>%
+  group_by(recordid, anti_names, anti_start) %>%
+  slice_max(
+    order_by = anti_end,
+    with_ties = FALSE
+  ) %>%
+  ungroup()
+#---------------------------------------------------------
+# Remove inconsistent records
+#---------------------------------------------------------
+treatment_clean <- treatment_clean %>%
+  filter(anti_end >= anti_start)
+#---------------------------------------------------------
+# Expand antibiotic episodes to one row per day
+#---------------------------------------------------------
+day_by_day <- treatment_clean %>%
+  rowwise() %>%
+  mutate(
+    days_seq = list(
+      seq.Date(
+        anti_start,
+        anti_end,
+        by = "day"
+      )
+    )
+  ) %>%
+  unnest(days_seq) %>%
+  mutate(
+    day_relative_to_onset =
+      as.integer(days_seq - inf_onset)
+  ) %>%
+  ungroup()
+
+#---------------------------------------------------------
+# Antibiotic abbreviations
+#---------------------------------------------------------
+
+day_by_day <- day_by_day %>%
+  mutate(
+    abbrev = dplyr::recode(
+      anti_names,
+      "Amikacin" = "AK",
+      "Amoxicillin" = "AMX",
+      "Amoxicillin-clavulanate" = "AMC",
+      "Amphotericin B" = "AMB",
+      "Ampicillin" = "AMP",
+      "Ampicillin/sulbactam" = "SAM",
+      "Anidulafungin" = "ANI",
+      "Azithromycin" = "AZM",
+      "Aztreonam" = "ATM",
+      "Benzylpenicillin" = "PEN",
+      "Caspofungin" = "CAS",
+      "Cefazolin" = "CFZ",
+      "Cefoxitin" = "FOX",
+      "Cefepime" = "FEP",
+      "Cefixime" = "CFM",
+      "Cefoperazone/sulbactam" = "CFP/SAM",
+      "Cefotaxime" = "CTX",
+      "Ceftazidime" = "CAZ",
+      "Ceftazidime/avibactam" = "CAZ/AVI",
+      "Ceftazidime/clavulanic acid" = "CAZ/CVA",
+      "Ceftolozane/tazobactam" = "C/T",
+      "Ceftriaxone" = "CRO",
+      "Cefuroxime" = "CXM",
+      "Cephalexin" = "LEX",
+      "Chloramphenicol" = "CHL",
+      "Ciprofloxacin" = "CIP",
+      "Clarithromycin" = "CLR",
+      "Clindamycin" = "CLI",
+      "Cloxacillin" = "CLOX",
+      "Colistin" = "COL",
+      "Daptomycin" = "DAP",
+      "Doripenem" = "DOR",
+      "Doxycycline" = "DOX",
+      "Ertapenem" = "ETP",
+      "Erythromycin" = "ERY",
+      "Fluconazole" = "FLU",
+      "Fosfomycin" = "FOS",
+      "Fusidic acid" = "FUS",
+      "Gentamicin" = "GM",
+      "Imipenem" = "IPM",
+      "Levofloxacin" = "LEV",
+      "Linezolid" = "LZD",
+      "Meropenem" = "MEM",
+      "Metronidazole" = "MTZ",
+      "Minocycline" = "MIN",
+      "Moxifloxacin" = "MXF",
+      "Ofloxacin" = "OFX",
+      "Oxacillin" = "OX",
+      "Penicillin" = "PEN",
+      "Piperacillin/tazobactam" = "TZP",
+      "Polymyxin B" = "PB",
+      "Posaconazole" = "POS",
+      "Rifampicin" = "RIF",
+      "Sitafloxacin" = "SIT",
+      "Streptomycin" = "STR",
+      "Teicoplanin" = "TEC",
+      "Tetracycline" = "TET",
+      "Tigecycline" = "TGC",
+      "Trimethoprim/sulfamethoxazole" = "SXT",
+      "Vancomycin" = "VA",
+      "Voriconazole" = "VOR",
+      .default = anti_names
+    )
+  )
+
+#---------------------------------------------------------
+# Resistance class
+#---------------------------------------------------------
+
+day_by_day <- day_by_day %>%
+  mutate(
+    resistance_class = case_when(
+      aci_car  == 1 ~ "ACI-CARB",
+      pse_car  == 1 ~ "PSE-CARB",
+      ent_car  == 1 ~ "ENT-CARB",
+      ent_thir == 1 ~ "ENT-3GC",
+      TRUE          ~ "NONE"
+    )
+  )
+
+#---------------------------------------------------------
+# Check missing abbreviations
+#---------------------------------------------------------
+
+missing_abbrev <- day_by_day %>%
+  filter(is.na(abbrev)) %>%
+  distinct(anti_names)
+
+if (nrow(missing_abbrev) > 0) {
+  warning("Missing antibiotic abbreviations:")
+  print(missing_abbrev)
+}
+#---------------------------------------------------------
+# Add BSI source
+#---------------------------------------------------------
+bsi <- bsi%>%
+  filter(redcap_repeat_instance == "1")
+day_by_day <- day_by_day %>%
+  left_join(
+    bsi %>% select(recordid, bsi_pri_sec, starts_with("bsi_pri_sec_1")),
+    by = "recordid"
+  )
+
+day_by_day <- day_by_day %>%
+  mutate(
+    bsi_pri_sec_label = case_when(
+      bsi_pri_sec == 1 ~ "Primary (unknown origin / central line)",
+      bsi_pri_sec == 2 ~ "Secondary (defined infection focus)",
+      bsi_pri_sec == 3 ~ "Unknown",
+      TRUE ~ NA_character_
+    ),
+    bsi_source = case_when(
+      `bsi_pri_sec_1___1` == 1 ~ "Skin/Soft tissue",
+      `bsi_pri_sec_1___2` == 1 ~ "Pulmonary",
+      `bsi_pri_sec_1___3` == 1 ~ "Digestive tract",
+      `bsi_pri_sec_1___4` == 1 ~ "Urinary tract",
+      `bsi_pri_sec_1___5` == 1 ~ "Surgical site",
+      `bsi_pri_sec_1___6` == 1 ~ "Unknown",
+      `bsi_pri_sec_1___7` == 1 ~ paste("Other:", bsi_pri_sec_1_other),
+      TRUE ~ NA_character_
+    )
+  )
+
+day_by_day <- day_by_day %>%
+  mutate(
+    bsi_other_raw  = bsi_pri_sec_1_other,
+    bsi_other_clean = bsi_other_raw |> 
+      str_to_lower() |> 
+      str_replace_all("[^\\p{L}\\p{N}\\s]", " ") |>  
+      str_squish()
+  )
+
+map_source <- function(x){
+  case_when(
+    is.na(x) ~ NA_character_,
+    
+    # Urinary
+    str_detect(x, "pyelo|uroseps|urinar|pcn|nephrost|kidney infect|uti|renal (cyst|collec)") ~ "Urinary tract",
+    
+    # Pulmonary
+    str_detect(x, "pneum|lung|empyema|pleur|tracheit|t1rf|supraglott|pulmon|肺|脓胸") ~ "Pulmonary",
+    
+    # Digestive/Hepatobiliary/GI
+    str_detect(x, "cholang|choledoch|hpb|hepatobili|bile|biliary|liver abscess|gi tract|gastrointestinal|abd(omen|ominal)|intra ?abdom|periton|appendic|pancreat|ascites|anastom|perforat|peritonitis|gut") ~ "Digestive tract",
+    
+    # Skin/Soft tissue / SSTI
+    str_detect(x, "cellulit|skin|soft tissue|sacral sore|pressure sore|wound|fournier|necrot|tophi|ulcer|absces|epidural|psoas|musculoskeletal|back lump|neck abce") ~ "Skin/Soft tissue",
+    
+    # Surgical site
+    str_detect(x, "postop|surgical site|post[- ]?operative") ~ "Surgical site",
+    
+    # Line-related / catheter / phlebitis  → se vuoi considerarle *primary* valuta separato
+    str_detect(x, "central line|picc|portacath|peripheral (iv|line)|branulla|catheter|crbsi|phlebit|thrombophlebit|cvc|line") ~ "Catheter/Line-related",
+    
+    # Neurological / CSF
+    str_detect(x, "meningit|csf|hydrocephalus|neuro") ~ "Neurological/CSF",
+    
+    # Cardiac / Endocarditis
+    str_detect(x, "endocardit|ie|cardiac|cied") ~ "Cardiac/Endocarditis",
+    
+    # Malignancy/hematology (se vuoi tenerla)
+    str_detect(x, "aml|all|leukemia|lymphoma|malignan|cancer|hcc|tumou?r|cld") ~ "Malignancy/Oncology",
+    
+    # Trauma/obstetric
+    str_detect(x, "trauma|post mva|abruptio|pue?peral|neonatal") ~ "Other (trauma/obstetric/neonatal)",
+    
+    TRUE ~ "Other (unmapped)"
+  )
+}
+
+day_by_day <- day_by_day %>%
+  mutate(
+    bsi_source_clean =
+      case_when(
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___1` == 1 ~ "Skin/Soft tissue",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___2` == 1 ~ "Pulmonary",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___3` == 1 ~ "Digestive tract",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___4` == 1 ~ "Urinary tract",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___5` == 1 ~ "Surgical site",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___6` == 1 ~ "Unknown",
+        bsi_pri_sec == 2 & `bsi_pri_sec_1___7` == 1 ~ map_source(bsi_other_clean),
+        TRUE ~ NA_character_
+      )
+  )
+
+day_by_day %>%
+  filter(bsi_pri_sec==2, `bsi_pri_sec_1___7`==1) %>%
+  count(bsi_source_clean, sort = TRUE)
+
+day_by_day <- day_by_day %>%
+  select(
+    recordid, anti_start, anti_end, spec_date, inf_onset,
+    infection_types,
+    org_combined, pathogen_combined_types,
+    anti_names, abbrev, ent_thir, ent_car, aci_car, pse_car, ent_car_3gcr,
+    bsi_pri_sec_label, bsi_source_clean, bsi_other_raw, day_relative_to_onset, 
+    abbrev, resistance_class, emp, def, 
+  )
