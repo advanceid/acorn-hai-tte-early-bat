@@ -1,0 +1,122 @@
+overall_cohort <- overall_cohort %>%
+  mutate(
+    BAT_category = case_when(
+      
+      A_day0 == 0 ~ "Not BAT",
+      
+      ## 3GCRE
+      source == "3GCRE" &
+        str_detect(exposure_regimen,
+                   regex("meropenem|imipenem|ertapenem", ignore_case = TRUE)) ~
+        "Carbapenem-based",
+      
+      ## CRE
+      source == "CRE" &
+        str_detect(exposure_regimen,
+                   regex("ceftazidime/?avibactam", ignore_case = TRUE)) ~
+        "Ceftazidime/avibactam-based",
+      
+      source == "CRE" &
+        str_detect(exposure_regimen,
+                   regex("colistin|polymyxin", ignore_case = TRUE)) ~
+        "Polymyxin-based",
+      
+      ## CRA
+      source == "CRA" &
+        str_detect(exposure_regimen,
+                   regex("colistin|polymyxin", ignore_case = TRUE)) &
+        str_detect(exposure_regimen,
+                   regex("ampicillin.?sulbactam|cefoperazone.?sulbactam", ignore_case = TRUE)) ~
+        "Polymyxin + Sulbactam-based",
+      
+      source == "CRA" &
+        str_detect(exposure_regimen,
+                   regex("ampicillin.?sulbactam|cefoperazone.?sulbactam", ignore_case = TRUE)) ~
+        "Sulbactam-based",
+      
+      source == "CRA" &
+        str_detect(exposure_regimen,
+                   regex("colistin|polymyxin", ignore_case = TRUE)) ~
+        "Polymyxin-based"
+    )
+  )
+
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+plot_df <- overall_cohort %>%
+  count(source, BAT_category) %>%
+  group_by(source) %>%
+  mutate(
+    pct = 100 * n / sum(n),
+    N = sum(n),
+    label = ifelse(pct >= 3,
+                   sprintf("%.1f%% (n=%d)", pct, n),
+                   "")
+  ) %>%
+  ungroup()
+
+plot_df$source <- factor(plot_df$source,
+                         levels = c("CRA","CRE","3GCRE"))
+
+plot_df$BAT_category <- factor(
+  plot_df$BAT_category,
+  levels = c(
+    "Polymyxin + Sulbactam-based",
+    "Polymyxin-based",
+    "Sulbactam-based",
+    "Ceftazidime/avibactam-based",
+    "Carbapenem-based",
+    "Not BAT"
+  )
+)
+
+cols <- c(
+  "Not BAT"="grey90",
+  "Carbapenem-based"="#4E79A7",
+  "Ceftazidime/avibactam-based"="#59A14F",
+  "Sulbactam-based"="#E15759",
+  "Polymyxin-based"="#AF7AA1",
+  "Polymyxin + Sulbactam-based"="#F28E2B"
+)
+
+BAT_proportion <- ggplot(plot_df,
+       aes(source, pct, fill=BAT_category)) +
+  geom_col(width=.65, colour="grey35", linewidth=.3) +
+  
+  geom_text(
+    aes(label = label),
+    position = position_stack(vjust = 0.5),
+    colour = "black",
+    fontface = "bold",
+    size = 4
+  ) +
+  
+  geom_text(data=distinct(plot_df, source, N),
+            aes(source, 103, label=paste0("N = ", N)),
+            inherit.aes=FALSE,
+            fontface="bold",
+            size=5) +
+  
+  scale_fill_manual(values=cols, drop=FALSE) +
+  
+  scale_y_continuous(
+    limits=c(0,110),
+    breaks=c(0,25,50,75,100),
+    labels=label_percent(scale=1)
+  ) +
+  
+  labs(
+    x=NULL,
+    y="Percentage of patients",
+    fill="Proportion of BAT\nat infection onset"
+  ) +
+  
+  theme_classic(base_size=15) +
+  theme(
+    legend.position="right",
+    axis.text.x=element_text(face="bold", size=16),
+    axis.title.y=element_text(face="bold")
+  )
