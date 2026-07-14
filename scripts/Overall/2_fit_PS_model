@@ -1,0 +1,82 @@
+#=========================================================
+# Propensity-score model for the combined cohort
+#=========================================================
+
+ps_formula_overall <- A_day0 ~
+  pitt_score +
+  severity_score +
+  ICU_status_day0 +
+  MV_status_day0 +
+  adm_ward_types_new +
+  # ns(pre_ab_days, df = 3) +
+  admtype_grp +
+  admreason_bin +
+  age_new +
+  sex +
+  country_income +
+  lbolog +
+  comorbidities_CCI +
+  UTI_source + 
+  score_coagulation
+
+m_ps_overall <- glm(
+  formula = ps_formula_overall,
+  data = overall_cohort,
+  family = binomial()
+)
+
+#=========================================================
+# Predict propensity scores
+#=========================================================
+
+overall_cohort <- overall_cohort %>%
+  mutate(
+    ps_overall = predict(
+      m_ps_overall,
+      newdata = overall_cohort,
+      type = "response"
+    )
+  )
+
+summary(overall_cohort$ps_overall)
+
+#=========================================================
+# Calculate stabilized IPTW
+#=========================================================
+
+# Marginal probability of early appropriate therapy
+p_treated <- mean(
+  overall_cohort$A_day0 == 1,
+  na.rm = TRUE
+)
+
+overall_cohort <- overall_cohort %>%
+  mutate(
+    iptw_overall = case_when(
+      A_day0 == 1 ~ p_treated / ps_overall,
+      A_day0 == 0 ~ (1 - p_treated) / (1 - ps_overall),
+      TRUE ~ NA_real_
+    )
+  )
+
+summary(overall_cohort$iptw_overall)
+
+#=========================================================
+# Truncate weights at the 1st and 99th percentiles
+#=========================================================
+
+weight_limits <- quantile(
+  overall_cohort$iptw_overall,
+  probs = c(0.01, 0.99),
+  na.rm = TRUE
+)
+
+overall_cohort <- overall_cohort %>%
+  mutate(
+    iptw_overall_trunc = pmin(
+      pmax(iptw_overall, weight_limits[[1]]),
+      weight_limits[[2]]
+    )
+  )
+
+summary(overall_cohort$iptw_overall_trunc)
