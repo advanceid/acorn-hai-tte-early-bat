@@ -1,0 +1,332 @@
+# 3GCRE
+analysis_3gcre_weighted <- analysis_3gcre_weighted %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+fit_esbl <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_3gcre_weighted,
+  weights = ipw
+)
+
+library(emmeans)
+
+emm_esbl <- emmeans(
+  fit_esbl,
+  ~ high_qsofa * no_early_BAT,
+  type = "response"
+)
+
+plot_data <- as.data.frame(emm_esbl)
+
+plot_data <- plot_data %>%
+  mutate(
+    qSOFA = factor(
+      high_qsofa,
+      levels = c(0,1),
+      labels = c("Low qSOFA","High qSOFA")
+    ),
+    BAT = factor(
+      no_early_BAT,
+      levels = c(0,1),
+      labels = c("Early BAT","No early BAT")
+    )
+  )
+
+
+plot_data <- plot_data %>%
+  mutate(
+    label = sprintf("%.1f%%", rate*100),
+    ci = sprintf("(%.1f–%.1f)",
+                 asymp.LCL*100,
+                 asymp.UCL*100)
+  )
+
+p_esbl <- ggplot(
+  plot_data,
+  aes(
+    x = qSOFA,
+    y = rate * 100,
+    fill = BAT
+  )
+) +
+  geom_col(
+    position = position_dodge(.75),
+    width = .62,
+    colour = "grey20",
+    linewidth = .4
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = asymp.LCL * 100,
+      ymax = asymp.UCL * 100
+    ),
+    position = position_dodge(.75),
+    width = .12,
+    linewidth = .6
+  ) +
+  geom_text(
+    aes(label = label),
+    position = position_dodge(.75),
+    vjust = -0.6,
+    fontface = "bold",
+    size = 4.4
+  ) +
+  scale_fill_manual(
+    values = wes_palette("Moonrise2", 2, type = "discrete")
+  ) +
+  labs(
+    x = NULL,
+    y = "Predicted 14-day mortality (%)",
+    fill = NULL,
+    caption = "Third-generation cephalosporin-resistant BSIs\nRERI = 2.05 (95% CI 0.25 to 4.41)"
+  ) +
+  coord_cartesian(
+    ylim = c(0, max(plot_data$asymp.UCL * 100) + 10),
+    clip = "off"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(face = "bold"),
+    plot.caption = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 12,
+      lineheight = 1.3,
+      margin = margin(t = 15)
+    )
+  )
+
+p_esbl
+
+# CRA
+analysis_crab_weighted <- analysis_crab_weighted %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+fit_cra <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_crab_weighted,
+  weights = ipw
+)
+
+library(emmeans)
+
+emm_cra <- emmeans(
+  fit_cra,
+  ~ high_qsofa * no_early_BAT,
+  type = "response"
+)
+
+plot_data <- as.data.frame(emm_cra)
+
+plot_data <- plot_data %>%
+  mutate(
+    qSOFA = factor(
+      high_qsofa,
+      levels = c(0,1),
+      labels = c("Low qSOFA","High qSOFA")
+    ),
+    BAT = factor(
+      no_early_BAT,
+      levels = c(0,1),
+      labels = c("Early BAT","No early BAT")
+    )
+  )
+
+
+plot_data <- plot_data %>%
+  mutate(
+    label = sprintf("%.1f%%", rate*100),
+    ci = sprintf("(%.1f–%.1f)",
+                 asymp.LCL*100,
+                 asymp.UCL*100)
+  )
+
+p_cra <- ggplot(
+  plot_data,
+  aes(
+    x = qSOFA,
+    y = rate * 100,
+    fill = BAT
+  )
+) +
+  geom_col(
+    position = position_dodge(.75),
+    width = .62,
+    colour = "grey20",
+    linewidth = .4
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = asymp.LCL * 100,
+      ymax = asymp.UCL * 100
+    ),
+    position = position_dodge(.75),
+    width = .12,
+    linewidth = .6
+  ) +
+  geom_text(
+    aes(label = label),
+    position = position_dodge(.75),
+    vjust = -0.6,
+    fontface = "bold",
+    size = 4.4
+  ) +
+  scale_fill_manual(
+    values = wes_palette("Moonrise2", 2, type = "discrete")
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = "Carbapenem-resistant Acinetobacter BSIs\nRERI = -0.03 (95% CI -3.79 to 1.87)"
+  ) +
+  coord_cartesian(
+    ylim = c(0, max(plot_data$asymp.UCL * 100) + 10),
+    clip = "off"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(face = "bold"),
+    plot.caption = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 12,
+      lineheight = 1.3,
+      margin = margin(t = 15)
+    )
+  )
+
+p_cra
+
+
+# CRE
+analysis_cre_weighted <- analysis_cre_weighted %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+fit_cre <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_cre_weighted,
+  weights = ipw
+)
+
+library(emmeans)
+
+emm_cre <- emmeans(
+  fit_cre,
+  ~ high_qsofa * no_early_BAT,
+  type = "response"
+)
+
+plot_data <- as.data.frame(emm_cre)
+
+plot_data <- plot_data %>%
+  mutate(
+    qSOFA = factor(
+      high_qsofa,
+      levels = c(0,1),
+      labels = c("Low qSOFA","High qSOFA")
+    ),
+    BAT = factor(
+      no_early_BAT,
+      levels = c(0,1),
+      labels = c("Early BAT","No early BAT")
+    )
+  )
+
+
+plot_data <- plot_data %>%
+  mutate(
+    label = sprintf("%.1f%%", rate*100),
+    ci = sprintf("(%.1f–%.1f)",
+                 asymp.LCL*100,
+                 asymp.UCL*100)
+  )
+
+p_cre <- ggplot(
+  plot_data,
+  aes(
+    x = qSOFA,
+    y = rate * 100,
+    fill = BAT
+  )
+) +
+  geom_col(
+    position = position_dodge(.75),
+    width = .62,
+    colour = "grey20",
+    linewidth = .4
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = asymp.LCL * 100,
+      ymax = asymp.UCL * 100
+    ),
+    position = position_dodge(.75),
+    width = .12,
+    linewidth = .6
+  ) +
+  geom_text(
+    aes(label = label),
+    position = position_dodge(.75),
+    vjust = -0.6,
+    fontface = "bold",
+    size = 4.4
+  ) +
+  scale_fill_manual(
+    values = wes_palette("Moonrise2", 2, type = "discrete")
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = "Carbapenem-resistant Enterobacterales BSIs\nRERI = -1.07 (95% CI -5.66 to 0.53)"
+  ) +
+  coord_cartesian(
+    ylim = c(0, max(plot_data$asymp.UCL * 100) + 10),
+    clip = "off"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(face = "bold"),
+    plot.caption = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 12,
+      lineheight = 1.3,
+      margin = margin(t = 15)
+    )
+  )
+
+p_cre
+
+final_figure <-
+  (p_esbl + p_cre + p_cra) +
+  plot_layout(
+    ncol = 3,
+    guides = "collect"
+  ) +
+  plot_annotation(
+    tag_levels = "A",
+    theme = theme(
+      plot.tag = element_text(face = "bold", size = 18),
+      plot.tag.position = "topleft"
+    )
+  ) &
+  theme(
+    legend.position = "top"
+  )
