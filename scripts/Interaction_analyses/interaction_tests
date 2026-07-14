@@ -1,0 +1,226 @@
+library(interactionR)
+
+#3GCRE
+#==========================================================
+# 1. Create binary variables
+#==========================================================
+
+analysis_3gcre <- analysis_3gcre %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+
+table(analysis_3gcre$high_qsofa, useNA = "ifany")
+
+#==========================================================
+# 2. Fit logistic interaction model
+#==========================================================
+
+fit_reri_qsofa <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_3gcre,
+  weights = ipw
+)
+
+summary(fit_reri_qsofa)
+
+#==========================================================
+# 3. Calculate RERI using interactionR
+#==========================================================
+
+res_qsofa <- interactionR(
+  model = fit_reri_qsofa,
+  exposure_names = c(
+    "high_qsofa",
+    "no_early_BAT"
+  ),
+  ci.type = "mover",
+  ci.level = 0.95,
+  em = TRUE,
+  recode = FALSE
+)
+
+interactionR_table(res_qsofa)
+
+# CRAB
+#==========================================================
+# 1. Create binary variables
+#==========================================================
+
+analysis_cra <- analysis_cra %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+
+table(analysis_cra$high_qsofa, useNA = "ifany")
+table(analysis_cra$no_early_BAT, useNA = "ifany")
+
+#==========================================================
+# 2. Fit logistic interaction model
+#==========================================================
+
+fit_reri_qsofa <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_cra,
+  weights = ipw
+)
+
+summary(fit_reri_qsofa)
+
+#==========================================================
+# 3. Calculate RERI using interactionR
+#==========================================================
+
+res_qsofa <- interactionR(
+  model = fit_reri_qsofa,
+  exposure_names = c(
+    "high_qsofa",
+    "no_early_BAT"
+  ),
+  ci.type = "mover",
+  ci.level = 0.95,
+  em = FALSE,
+  recode = FALSE
+)
+
+interactionR_table(res_qsofa)
+
+# CRE
+#==========================================================
+# 1. Create binary variables
+#==========================================================
+
+analysis_cre <- analysis_cre %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+
+table(analysis_cre$high_qsofa, useNA = "ifany")
+table(analysis_cre$no_early_BAT, useNA = "ifany")
+
+#==========================================================
+# 2. Fit logistic interaction model
+#==========================================================
+
+fit_reri_qsofa <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis_cre,
+  weights = ipw
+)
+
+summary(fit_reri_qsofa)
+
+#==========================================================
+# 3. Calculate RERI using interactionR
+#==========================================================
+
+res_qsofa <- interactionR(
+  model = fit_reri_qsofa,
+  exposure_names = c(
+    "high_qsofa",
+    "no_early_BAT"
+  ),
+  ci.type = "mover",
+  ci.level = 0.95,
+  em = TRUE,
+  recode = FALSE
+)
+
+interactionR_table(res_qsofa)
+
+# Overall
+
+#==========================================================
+# 1. Create binary variables
+#==========================================================
+
+overall_cohort <- overall_cohort %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+
+table(overall_cohort$high_qsofa, useNA = "ifany")
+table(overall_cohort$no_early_BAT, useNA = "ifany")
+
+#==========================================================
+# 2. Fit logistic interaction model
+#==========================================================
+
+fit_reri_qsofa <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = overall_cohort,
+  weights = iptw_overall_trunc
+)
+
+summary(fit_reri_qsofa)
+
+#==========================================================
+# 3. Calculate RERI using interactionR
+#==========================================================
+
+res_qsofa <- interactionR(
+  model = fit_reri_qsofa,
+  exposure_names = c(
+    "high_qsofa",
+    "no_early_BAT"
+  ),
+  ci.type = "mover",
+  ci.level = 0.95,
+  em = FALSE,
+  recode = FALSE
+)
+
+interactionR_table(res_qsofa)
+
+# MDR
+#==========================================================
+# 1. Create binary variables
+#==========================================================
+
+analysis1_mdr <- analysis1_mdr %>%
+  mutate(
+    high_qsofa   = ifelse(severity_score >= 2, 1, 0),
+    no_early_BAT = ifelse(A_day0 == 0, 1, 0)
+  )
+
+table(analysis1_mdr$high_qsofa, useNA = "ifany")
+table(analysis1_mdr$no_early_BAT, useNA = "ifany")
+
+#==========================================================
+# 2. Fit logistic interaction model
+#==========================================================
+
+fit_reri_qsofa <- glm(
+  fourteen_day_death ~ high_qsofa * no_early_BAT,
+  family = poisson(link = "log"),
+  data = analysis1_mdr,
+  weights = ipw
+)
+
+summary(fit_reri_qsofa)
+
+#==========================================================
+# 3. Calculate RERI using interactionR
+#==========================================================
+
+res_qsofa <- interactionR(
+  model = fit_reri_qsofa,
+  exposure_names = c(
+    "high_qsofa",
+    "no_early_BAT"
+  ),
+  ci.type = "mover",
+  ci.level = 0.95,
+  em = TRUE,
+  recode = FALSE
+)
+
+interactionR_table(res_qsofa)
