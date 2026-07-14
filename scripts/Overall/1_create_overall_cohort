@@ -1,0 +1,17 @@
+# Combine the three mutually exclusive phenotype-specific
+# cohorts to recreate the overall study population.
+#=========================================================
+# 1. Combine datasets
+#=========================================================
+
+overall_cohort <- bind_rows(
+  cre %>% mutate(source = "CRE"),
+  threegcre %>% mutate(source = "3GCRE"),
+  cra %>% mutate(source = "CRAB")
+) %>%
+  mutate(
+    source = factor(
+      source,
+      levels = c("3GCRE", "CRE", "CRAB")
+    )
+  )
