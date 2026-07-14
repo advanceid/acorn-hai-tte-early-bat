@@ -1,0 +1,57 @@
+## ==============================
+## PLOT
+## ==============================
+time_labels <- data.frame(
+  time = factor(levels(df_plot$time), levels = levels(df_plot$time)),
+  x = -4,
+  y = 4.9
+)
+
+risk_label <- data.frame(
+  time = factor(levels(df_plot$time)[1], levels = levels(df_plot$time)),
+  x = 17,
+  y = 4.9
+)
+
+forestplot <- ggplot(df_plot, aes(x = RD, y = group)) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.7) +
+  geom_errorbarh(aes(xmin = low, xmax = high), height = 0.18, linewidth = 0.8) +
+  geom_point(aes(size = group == "Overall"), shape = 16) +
+  scale_size_manual(values = c(`TRUE` = 3.8, `FALSE` = 2.6), guide = "none") +
+  geom_text(aes(x = 12, label = label), hjust = 0, size = 3.8) +
+  geom_text(
+    data = time_labels,
+    aes(x = x, y = y, label = time),
+    inherit.aes = FALSE,
+    fontface = "bold",
+    hjust = 0.5,
+    size = 5
+  ) +
+  geom_text(
+    data = risk_label,
+    aes(x = x, y = y),
+    label = "Risk difference (95% CI)",
+    inherit.aes = FALSE,
+    fontface = "bold",
+    hjust = 0.5,
+    size = 5
+  ) +
+  facet_wrap(~time, ncol = 1, strip.position = "top") +
+  coord_cartesian(xlim = c(-30, 22), clip = "off") +
+  labs(
+    subtitle = "IPTW-weighted marginal risk differences",
+    x = "Risk difference in mortality (%)",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid = element_blank(),
+    strip.text = element_blank(),
+    strip.background = element_blank(),
+    axis.title.x = element_text(
+      hjust = 0.6
+    ),
+    plot.subtitle = element_text(hjust = 0.8, size = 16, margin = margin(b = 24)),
+    axis.text.y = element_text(size = 12),
+    plot.margin = margin(10, 180, 10, 10)
+  )
