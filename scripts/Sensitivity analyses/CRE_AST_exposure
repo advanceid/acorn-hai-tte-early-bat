@@ -1,0 +1,255 @@
+source(here::here("scripts", "00_setup.R"))
+
+day_by_day <- readRDS(
+  here("data", "processed", "day_by_day.rds")
+)
+
+baseline <- readRDS(
+  here("data", "raw", "baseline_outcomes_index.RData")
+)
+
+ast <- readRDS(
+  here("data", "raw", "ast_all_index.RData")
+)
+#---------------------------------------------------------
+# Restrict to CRE phenotype
+#---------------------------------------------------------
+
+day_by_day_cre <- day_by_day %>%
+  filter(resistance_class == "ENT-CARB")
+
+#---------------------------------------------------------
+# Collapse antibiotics to one row per patient-day
+#---------------------------------------------------------
+
+combo_by_day_cre <- day_by_day_cre %>%
+  group_by(recordid, day_relative_to_onset) %>%
+  summarise(
+    ab_combo = paste(sort(unique(anti_names)), collapse = "+"),
+    .groups = "drop"
+  )
+
+#---------------------------------------------------------
+# Add patient-day metadata
+#---------------------------------------------------------
+
+meta_per_day <- day_by_day_cre %>%
+  select(
+    recordid,
+    day_relative_to_onset,
+    inf_onset,
+    org_combined,
+    bsi_source_clean,
+    bsi_pri_sec_label
+  ) %>%
+  distinct()
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  left_join(
+    meta_per_day,
+    by = c("recordid", "day_relative_to_onset")
+  ) %>%
+  mutate(
+    ab_combo = na_if(ab_combo, "")
+  )
+
+#---------------------------------------------------------
+# Create BSI source variable
+#---------------------------------------------------------
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  mutate(
+    bsi_source = case_when(
+      bsi_pri_sec_label == "Primary (unknown origin / central line)" ~
+        "Primary (unknown origin / central line)",
+      bsi_pri_sec_label == "Secondary (defined infection focus)" ~
+        paste("Secondary -", bsi_source_clean),
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  select(
+    recordid,
+    day_relative_to_onset,
+    ab_combo,
+    inf_onset,
+    org_combined,
+    bsi_source
+  )
+
+#---------------------------------------------------------
+# Define BAT
+#---------------------------------------------------------
+#aggiungi AST dei farmaci di interesse
+combo_by_day_cre <- combo_by_day_cre %>%
+  left_join(
+    ast %>%
+      select(recordid, inf_onset, `Ceftazidime/avibactam`, Colistin, `Polymyxin B`, 
+             `Ceftolozane/tazobactam`, Tigecycline, Minocycline, Amikacin, Gentamicin, 
+             Fosfomycin, Aztreonam, Meropenem, Imipenem, Ertapenem, Doripenem), 
+    by = c("recordid", "inf_onset")
+  )
+
+# define appropriateness
+valid_drugs <- c("Ceftazidime/avibactam", "Ceftolozane/tazobactam", "Fosfomycin", "Aztreonam", 
+                 "Colistin", "Polymyxin B")
+
+check_appropriateness_cre_row <- function(row) {
+  ab_list <- trimws(unlist(strsplit(row$ab_combo, "\\+")))
+  ab_list <- intersect(ab_list, valid_drugs)
+  if (length(ab_list) == 0) return("Not appropriate")
+  
+  check_ast <- function(drug) {
+    if (!drug %in% names(row)) return(NA)
+    v <- suppressWarnings(as.numeric(row[[drug]]))  # 1=R, 2=I, 3=S
+    if (is.na(v)) return(NA)
+    if (v == 1) return("R")
+    if (v == 2) return("I")
+    if (v == 3) return("S")
+    return(NA)
+  }
+  
+  ast_calls <- sapply(ab_list, check_ast)
+  
+  if (any(ast_calls %in% c("S", "I"), na.rm = TRUE)) return("Appropriate")
+  return("Not appropriate")
+}
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  rowwise() %>%
+  mutate(
+    appropriateness = check_appropriateness_cre_row(pick(everything()))
+  ) %>%
+  ungroup()
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  select(recordid, ab_combo, appropriateness, everything())
+
+# Define Day 0 appropriate
+combo_by_day_cre <- combo_by_day_cre %>%
+  group_by(recordid) %>%
+  mutate(
+    start_day = case_when(
+      # Se primo giorno appropriato è -1, 0, o +1 → considero "0"
+      any(day_relative_to_onset %in% c(-1, 0, 1) & appropriateness == "Appropriate") ~ 0,
+      
+      # Altrimenti: primo giorno appropriato ≥2
+      any(day_relative_to_onset >= 2 & appropriateness == "Appropriate") ~ 
+        min(day_relative_to_onset[day_relative_to_onset >= 2 & appropriateness == "Appropriate"], na.rm = TRUE),
+      
+      # Se mai appropriato
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  ungroup()
+
+#---------------------------------------------------------
+# Check distribution of first appropriate therapy day
+#---------------------------------------------------------
+
+start_day_distribution <- combo_by_day_cre %>%
+  distinct(recordid, start_day) %>%
+  count(start_day) %>%
+  arrange(start_day)
+
+print(start_day_distribution)
+
+#---------------------------------------------------------
+# Define early appropriate therapy exposure
+#---------------------------------------------------------
+
+combo_by_day_cre <- combo_by_day_cre %>% 
+  mutate(
+    A_day0 = case_when(
+      start_day == 0          ~ 1L,
+      TRUE ~ 0L
+    )
+  )
+
+#---------------------------------------------------------
+# Define exposure regimen during the day-0 window
+#---------------------------------------------------------
+
+#---------------------------------------------------------
+# Helper function: keep only AST-susceptible antibiotics
+#---------------------------------------------------------
+
+extract_active <- function(row) {
+  
+  ab_list <- trimws(strsplit(row$ab_combo[[1]], "\\+")[[1]])
+  ab_list <- intersect(ab_list, valid_drugs)
+  
+  active <- character(0)
+  
+  for (drug in ab_list) {
+    
+    if (!drug %in% names(row)) next
+    
+    ast <- suppressWarnings(as.numeric(row[[drug]][[1]]))
+    
+    if (!is.na(ast) && ast %in% c(2, 3)) {
+      active <- c(active, drug)
+    }
+  }
+  
+  if (length(active) == 0) return(NA_character_)
+  
+  paste(active, collapse = "+")
+}
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  rowwise() %>%
+  mutate(
+    active_regimen = extract_active(pick(everything()))
+  ) %>%
+  ungroup()
+
+#---------------------------------------------------------
+# Define exposure regimen during the day-0 window
+#---------------------------------------------------------
+
+exposure_regimen <- combo_by_day_cre %>%
+  group_by(recordid) %>%
+  summarise(
+    
+    exposure_regimen = if (first(A_day0) == 1) {
+      
+      first(
+        active_regimen[
+          day_relative_to_onset %in% c(-1, 0, 1) &
+            appropriateness == "Appropriate"
+        ]
+      )
+      
+    } else {
+      
+      paste(
+        unique(
+          na.omit(
+            ab_combo[
+              day_relative_to_onset %in% c(-1, 0, 1)
+            ]
+          )
+        ),
+        collapse = " | "
+      )
+      
+    },
+    
+    .groups = "drop"
+  )
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  left_join(
+    exposure_regimen,
+    by = "recordid"
+  ) %>%
+  select(-active_regimen)
+
+combo_by_day_cre <- combo_by_day_cre %>%
+  mutate(
+    exposure_regimen = if_else(
+      exposure_regimen == "",
+      "Not on therapy",
+      exposure_regimen
+    )
+  )
