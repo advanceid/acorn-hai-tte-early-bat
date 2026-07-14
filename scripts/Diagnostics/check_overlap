@@ -1,0 +1,33 @@
+#=========================================================
+# Assess propensity score overlap
+#=========================================================
+
+ps_overlap <- ggplot(
+  df,
+  aes(
+    x = ps,
+    fill = factor(A_day0)
+  )
+) +
+  geom_density(
+    alpha = 0.40
+  ) +
+  scale_fill_manual(
+    values = c("#B2182B", "#2166AC"),
+    labels = c(
+      "No early appropriate therapy",
+      "Early appropriate therapy"
+    ),
+    name = NULL
+  ) +
+  labs(
+    x = "Propensity score",
+    y = "Density"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = "top",
+    panel.grid = element_blank()
+  )
+
+ps_overlap
