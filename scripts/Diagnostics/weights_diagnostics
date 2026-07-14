@@ -1,0 +1,24 @@
+library(cobalt)
+# --- Balance
+bal <- bal.tab(ps_formula, data = df, weights = df$ipw,
+               method = "weighting", estimand = "ATE", un = TRUE)
+
+print(bal$Balance[, c("Diff.Un","Diff.Adj")])  
+
+love.plot(bal, stat = "mean.diffs", abs = TRUE,
+          thresholds = c(m = .10), line = TRUE,
+          sample.names = c("Unweighted","Weighted"),
+          title = "Covariate Balance — IPTW (ATE)")
+
+# --- PS overlap (no need to retype covariates)
+ggplot(df, aes(ps, fill = factor(A_day0))) +
+  geom_density(alpha = .4) +
+  labs(x = "Propensity score", fill = "A_day0") +
+  theme_minimal() + theme(panel.grid = element_blank())
+
+# --- Effective sample size
+w <- df$ipw
+ESS_all <- (sum(w)^2) / sum(w^2)
+ESS_t   <- with(subset(df, A_day0==1), (sum(ipw)^2) / sum(ipw^2))
+ESS_c   <- with(subset(df, A_day0==0), (sum(ipw)^2) / sum(ipw^2))
+cat(sprintf("ESS overall: %.1f | treated: %.1f | control: %.1f\n", ESS_all, ESS_t, ESS_c))
