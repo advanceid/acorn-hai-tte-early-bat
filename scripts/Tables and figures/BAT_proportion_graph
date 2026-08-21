@@ -41,11 +41,6 @@ overall_cohort <- overall_cohort %>%
     )
   )
 
-
-library(dplyr)
-library(ggplot2)
-library(scales)
-
 plot_df <- overall_cohort %>%
   count(source, BAT_category) %>%
   group_by(source) %>%
